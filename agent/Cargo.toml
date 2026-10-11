@@ -1,0 +1,13 @@
+[package]
+name = "biometric-polkit-agent"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+slint = "1.9"
+zbus = { version = "5.5", default-features = false, features = ["tokio"] }
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "io-util", "process", "time", "sync"] }
+zeroize = { version = "1.8", features = ["derive"] }
+
+[build-dependencies]
+slint-build = "1.9"

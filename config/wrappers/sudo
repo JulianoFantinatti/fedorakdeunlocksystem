@@ -1,0 +1,45 @@
+#!/bin/bash
+# Sudo wrapper that routes graphical elevation through our Biometric PolicyKit agent
+
+# If already root, run command directly
+if [ "$EUID" -eq 0 ]; then
+    exec "$@"
+fi
+
+# If no display server is available (headless TTY / non-graphical SSH), fallback to native sudo
+if [ -z "$WAYLAND_DISPLAY" ] && [ -z "$DISPLAY" ]; then
+    exec /usr/bin/sudo "$@"
+fi
+
+# Handle common flags
+case "$1" in
+    "")
+        exec /usr/bin/sudo
+        ;;
+    -h|--help|-V|--version)
+        exec /usr/bin/sudo "$@"
+        ;;
+    -i)
+        shift
+        if [ $# -eq 0 ]; then
+            exec /usr/local/bin/w /bin/bash -l
+        else
+            exec /usr/local/bin/w /bin/bash -l -c "$*"
+        fi
+        ;;
+    -s)
+        shift
+        if [ $# -eq 0 ]; then
+            exec /usr/local/bin/w /bin/bash
+        else
+            exec /usr/local/bin/w /bin/bash -c "$*"
+        fi
+        ;;
+    -E)
+        shift
+        exec /usr/local/bin/w "$@"
+        ;;
+    *)
+        exec /usr/local/bin/w "$@"
+        ;;
+esac

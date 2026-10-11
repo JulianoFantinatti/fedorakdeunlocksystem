@@ -1,0 +1,58 @@
+#!/bin/bash
+# Checks if the requested biometric mode matches the currently active UI mode.
+# Arguments: target_mode ("face", "fingerprint", "password")
+TARGET="$1"
+
+# 1. Resolve UID from PAM context if available
+MODE_FILE=""
+
+resolve_mode_file() {
+    local target_user="$1"
+    if [ -n "$target_user" ]; then
+        local uid
+        uid=$(id -u "$target_user" 2>/dev/null)
+        if [ -n "$uid" ] && [ -f "/run/user/${uid}/biometric_mode" ]; then
+            echo "/run/user/${uid}/biometric_mode"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# Try PAM_USER
+if [ -n "$PAM_USER" ]; then
+    MODE_FILE=$(resolve_mode_file "$PAM_USER")
+fi
+
+# Try PAM_RUSER if not found yet
+if [ -z "$MODE_FILE" ] && [ -n "$PAM_RUSER" ]; then
+    MODE_FILE=$(resolve_mode_file "$PAM_RUSER")
+fi
+
+# Try current XDG_RUNTIME_DIR
+if [ -z "$MODE_FILE" ] && [ -n "$XDG_RUNTIME_DIR" ] && [ -f "${XDG_RUNTIME_DIR}/biometric_mode" ]; then
+    MODE_FILE="${XDG_RUNTIME_DIR}/biometric_mode"
+fi
+
+# Fallback: scan active user runtime dirs under /run/user/
+if [ -z "$MODE_FILE" ]; then
+    for candidate in /run/user/[0-9]*/biometric_mode; do
+        if [ -f "$candidate" ]; then
+            MODE_FILE="$candidate"
+            break
+        fi
+    done
+fi
+
+if [ -n "$MODE_FILE" ] && [ -f "$MODE_FILE" ]; then
+    CURRENT_MODE=$(head -n 1 "$MODE_FILE" 2>/dev/null | tr -d '\r\n[:space:]')
+else
+    # Default fallback when UI is not active
+    CURRENT_MODE="fingerprint"
+fi
+
+if [ "$CURRENT_MODE" = "$TARGET" ]; then
+    exit 0
+else
+    exit 1
+fi

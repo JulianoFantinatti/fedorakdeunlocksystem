@@ -1,0 +1,20 @@
+#%PAM-1.0
+# Polkit PAM stack with dynamic biometric mode gating
+auth        required                                     pam_env.so
+auth        required                                     pam_faildelay.so delay=2000000
+
+# 1. Face Recognition check (invoked only if active mode is 'face')
+auth        [success=ignore default=1]                   pam_exec.so quiet /usr/local/bin/check-biometric-mode face
+auth        sufficient                                   pam_visage.so
+
+# 2. Fingerprint check (invoked only if active mode is 'fingerprint')
+auth        [success=ignore default=1]                   pam_exec.so quiet /usr/local/bin/check-biometric-mode fingerprint
+auth        sufficient                                   pam_fprintd.so
+
+# 3. Password fallback
+auth        sufficient                                   pam_unix.so nullok
+auth        required                                     pam_deny.so
+
+account     include                                      system-auth
+password    include                                      system-auth
+session     include                                      system-auth

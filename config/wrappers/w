@@ -1,0 +1,21 @@
+#!/bin/bash
+# 'w' - Secure elevation wrapper to Polkit (pkexec)
+# Preserves current working directory and Wayland/X11 display variables.
+
+if [ $# -eq 0 ]; then
+    echo "Usage: w <command> [args...]"
+    echo "Example: w dnf update"
+    exit 1
+fi
+
+if [ "$EUID" -eq 0 ]; then
+    exec "$@"
+fi
+
+ORIG_PWD="$PWD"
+
+exec pkexec env \
+    DISPLAY="${DISPLAY:-:0}" \
+    WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
+    bash -c 'cd "$1" 2>/dev/null; shift; exec "$@"' _ "$ORIG_PWD" "$@"

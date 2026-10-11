@@ -1,0 +1,434 @@
+import { Button, LineEdit } from "std-widgets.slint";
+
+export component AuthWindow inherits Window {
+    title: "Authentication Required";
+    icon: @image-url("");
+    width: 440px;
+    height: 480px;
+    background: #181b20;
+    default-font-family: "Noto Sans, Inter, sans-serif";
+
+    // Callbacks to Rust backend
+    callback ok-clicked(string);
+    callback cancel-clicked();
+    callback mode-changed(int);
+
+    // Properties
+    in-out property <int> active-mode: 0; // 0 = Fingerprint, 1 = Face, 2 = Password
+    in-out property <string> password-text: "";
+    in property <string> action-message: "Authentication is required to perform this action.";
+    in-out property <string> status-text: "Touch fingerprint sensor...";
+    in property <bool> is-authenticating: true;
+    in property <bool> auth-success: false;
+    in property <bool> auth-failed: false;
+
+    // Live camera output properties
+    in-out property <image> camera-frame;
+    in-out property <bool> has-camera-frame: false;
+
+    // Animation timer ticker (driven by property in Slint)
+    in-out property <float> scan-pos: 0.0;
+
+    forward-focus: key-handler;
+
+    key-handler := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.LeftArrow) {
+                if (active-mode == 0) {
+                    active-mode = 2;
+                } else {
+                    active-mode = active-mode - 1;
+                }
+                mode-changed(active-mode);
+                return accept;
+            }
+            if (event.text == Key.RightArrow) {
+                if (active-mode == 2) {
+                    active-mode = 0;
+                } else {
+                    active-mode = active-mode + 1;
+                }
+                mode-changed(active-mode);
+                return accept;
+            }
+            if (event.text == Key.Escape) {
+                cancel-clicked();
+                return accept;
+            }
+            if (event.text == Key.Return) {
+                if (active-mode == 2) {
+                    ok-clicked(root.password-text);
+                } else {
+                    ok-clicked("");
+                }
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            padding: 24px;
+            spacing: 16px;
+
+            // Header Message
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "System Authentication";
+                    font-size: 18px;
+                    font-weight: 700;
+                    color: #ffffff;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: root.action-message;
+                    font-size: 13px;
+                    color: #9ba1ad;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+
+            // Visual Center Stage (Fingerprint / Face / Password)
+            Rectangle {
+                height: 200px;
+                background: #20242c;
+                border-radius: 16px;
+                border-width: 1px;
+                border-color: root.auth-success ? #2ecc71 : (root.auth-failed ? #e74c3c : #313844);
+                clip: true;
+
+                // Mode 0: Fingerprint Stage (Default)
+                if active-mode == 0 : VerticalLayout {
+                    alignment: center;
+                    spacing: 12px;
+
+                    HorizontalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 90px;
+                            height: 110px;
+                            border-radius: 45px;
+                            border-width: 3px;
+                            border-color: root.auth-success ? #2ecc71 : #4c8bf5;
+                            background: #252b36;
+                            clip: true;
+
+                            // Inner concentric curves representing fingerprint ridges
+                            Rectangle {
+                                width: 66px;
+                                height: 86px;
+                                border-radius: 33px;
+                                border-width: 2.5px;
+                                border-color: root.auth-success ? #2ecc71 : #3f7ae0;
+                                x: 12px;
+                                y: 12px;
+                            }
+                            Rectangle {
+                                width: 44px;
+                                height: 62px;
+                                border-radius: 22px;
+                                border-width: 2px;
+                                border-color: root.auth-success ? #2ecc71 : #386ecc;
+                                x: 23px;
+                                y: 24px;
+                            }
+                            Rectangle {
+                                width: 22px;
+                                height: 38px;
+                                border-radius: 11px;
+                                border-width: 2px;
+                                border-color: root.auth-success ? #2ecc71 : #3160b3;
+                                x: 34px;
+                                y: 36px;
+                            }
+
+                            // iOS-style animated scanning beam
+                            Rectangle {
+                                width: 100%;
+                                height: 4px;
+                                background: #64b5f6;
+                                y: 10px + root.scan-pos * 90px;
+                                opacity: 0.85;
+                                border-radius: 2px;
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: root.auth-success ? "Fingerprint Verified!" : root.status-text;
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: root.auth-success ? #2ecc71 : #8ab4f8;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                // Mode 1: Face Recognition Stage (Full Square Live Camera Feed)
+                if active-mode == 1 : Rectangle {
+                    width: 100%;
+                    height: 100%;
+                    clip: true;
+
+                    // Real Live Camera Output filling entire stage
+                    if root.has-camera-frame : Image {
+                        source: root.camera-frame;
+                        width: 100%;
+                        height: 100%;
+                        image-fit: cover;
+                    }
+
+                    // Placeholder while camera is initializing
+                    if !root.has-camera-frame : Rectangle {
+                        width: 100%;
+                        height: 100%;
+                        background: #1a1e24;
+
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 8px;
+                            Text {
+                                text: "📷";
+                                font-size: 44px;
+                                horizontal-alignment: center;
+                            }
+                            Text {
+                                text: "Starting camera...";
+                                font-size: 13px;
+                                color: #8ab4f8;
+                                horizontal-alignment: center;
+                            }
+                        }
+                    }
+
+                    // Cyber HUD corner brackets
+                    // Top-Left corner bracket
+                    Rectangle { x: 14px; y: 14px; width: 22px; height: 2.5px; background: root.auth-success ? #2ecc71 : #4c8bf5; }
+                    Rectangle { x: 14px; y: 14px; width: 2.5px; height: 22px; background: root.auth-success ? #2ecc71 : #4c8bf5; }
+
+                    // Top-Right corner bracket
+                    Rectangle { x: parent.width - 36px; y: 14px; width: 22px; height: 2.5px; background: root.auth-success ? #2ecc71 : #4c8bf5; }
+                    Rectangle { x: parent.width - 16.5px; y: 14px; width: 2.5px; height: 22px; background: root.auth-success ? #2ecc71 : #4c8bf5; }
+
+                    // Bottom-Left corner bracket
+                    Rectangle { x: 14px; y: parent.height - 54px; width: 2.5px; height: 22px; background: root.auth-success ? #2ecc71 : #4c8bf5; }
+                    Rectangle { x: 14px; y: parent.height - 34.5px; width: 22px; height: 2.5px; background: root.auth-success ? #2ecc71 : #4c8bf5; }
+
+                    // Bottom-Right corner bracket
+                    Rectangle { x: parent.width - 16.5px; y: parent.height - 54px; width: 2.5px; height: 22px; background: root.auth-success ? #2ecc71 : #4c8bf5; }
+                    Rectangle { x: parent.width - 36px; y: parent.height - 34.5px; width: 22px; height: 2.5px; background: root.auth-success ? #2ecc71 : #4c8bf5; }
+
+                    // Full-width animated scanning laser beam
+                    Rectangle {
+                        width: 100%;
+                        height: 3px;
+                        background: root.auth-success ? #2ecc71 : #64b5f6;
+                        y: 8px + root.scan-pos * 154px;
+                        opacity: 0.85;
+                    }
+
+                    // Bottom status bar overlay
+                    Rectangle {
+                        height: 32px;
+                        width: 100%;
+                        y: parent.height - 32px;
+                        background: #000000bb;
+
+                        HorizontalLayout {
+                            alignment: center;
+                            Text {
+                                text: root.auth-success ? "✓ Face Recognized!" : root.status-text;
+                                font-size: 13px;
+                                font-weight: 600;
+                                color: root.auth-success ? #2ecc71 : #8ab4f8;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // Mode 2: Password Stage
+                if active-mode == 2 : Rectangle {
+                    width: 100%;
+                    height: 100%;
+
+                    VerticalLayout {
+                        alignment: center;
+                        padding-left: 32px;
+                        padding-right: 32px;
+                        spacing: 16px;
+
+                        // Key Icon Representation
+                        Text {
+                            text: "🔑";
+                            font-size: 38px;
+                            horizontal-alignment: center;
+                        }
+
+                        LineEdit {
+                            placeholder-text: "Enter your password...";
+                            input-type: password;
+                            text <=> root.password-text;
+                            accepted => {
+                                ok-clicked(root.password-text);
+                            }
+                        }
+
+                        Text {
+                            text: "Press Enter or click OK to authenticate";
+                            font-size: 12px;
+                            color: #7d8594;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            // Mode Selection Pills (Fingerprint, Face, Password)
+            HorizontalLayout {
+                spacing: 8px;
+
+                // Pill 0: Fingerprint
+                Rectangle {
+                    height: 38px;
+                    border-radius: 8px;
+                    background: active-mode == 0 ? #3875e8 : #272c36;
+                    border-width: active-mode == 0 ? 0px : 1px;
+                    border-color: #383f4d;
+
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 6px;
+                        Text {
+                            text: "🖹 Fingerprint";
+                            font-size: 13px;
+                            font-weight: active-mode == 0 ? 700 : 500;
+                            color: active-mode == 0 ? #ffffff : #c0c6d4;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            active-mode = 0;
+                            mode-changed(0);
+                        }
+                    }
+                }
+
+                // Pill 1: Face Recognition
+                Rectangle {
+                    height: 38px;
+                    border-radius: 8px;
+                    background: active-mode == 1 ? #3875e8 : #272c36;
+                    border-width: active-mode == 1 ? 0px : 1px;
+                    border-color: #383f4d;
+
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 6px;
+                        Text {
+                            text: "📷 Face";
+                            font-size: 13px;
+                            font-weight: active-mode == 1 ? 700 : 500;
+                            color: active-mode == 1 ? #ffffff : #c0c6d4;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            active-mode = 1;
+                            mode-changed(1);
+                        }
+                    }
+                }
+
+                // Pill 2: Password
+                Rectangle {
+                    height: 38px;
+                    border-radius: 8px;
+                    background: active-mode == 2 ? #3875e8 : #272c36;
+                    border-width: active-mode == 2 ? 0px : 1px;
+                    border-color: #383f4d;
+
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 6px;
+                        Text {
+                            text: "🔑 Password";
+                            font-size: 13px;
+                            font-weight: active-mode == 2 ? 700 : 500;
+                            color: active-mode == 2 ? #ffffff : #c0c6d4;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            active-mode = 2;
+                            mode-changed(2);
+                        }
+                    }
+                }
+            }
+
+            // Bottom Action Buttons (Cancel / OK)
+            HorizontalLayout {
+                spacing: 12px;
+                alignment: end;
+
+                // Cancel Button
+                Rectangle {
+                    width: 100px;
+                    height: 38px;
+                    border-radius: 8px;
+                    background: #2b303b;
+                    border-width: 1px;
+                    border-color: #3c4453;
+
+                    Text {
+                        text: "Cancel";
+                        font-size: 13px;
+                        color: #c0c6d4;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            cancel-clicked();
+                        }
+                    }
+                }
+
+                // OK / Authenticate Button
+                Rectangle {
+                    width: 120px;
+                    height: 38px;
+                    border-radius: 8px;
+                    background: #3875e8;
+
+                    Text {
+                        text: "Authenticate";
+                        font-size: 13px;
+                        font-weight: 700;
+                        color: #ffffff;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            if (active-mode == 2) {
+                                ok-clicked(root.password-text);
+                            } else {
+                                ok-clicked("");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
